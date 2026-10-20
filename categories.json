@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Falhas de produto (asserções)",
+    "matchedStatuses": ["failed"]
+  },
+  {
+    "name": "Falhas de teste ou de ambiente",
+    "matchedStatuses": ["broken"]
+  },
+  {
+    "name": "Testes ignorados",
+    "matchedStatuses": ["skipped"]
+  }
+]

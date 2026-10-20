@@ -7,7 +7,8 @@
   },
   "scripts": {
     "test": "playwright test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "report:local": "ALLURE_BIN='npx allure' bash scripts/generate-report.sh"
   },
   "license": "MIT",
   "devDependencies": {
