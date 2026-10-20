@@ -11,7 +11,8 @@
     "report": "docker compose --profile generate run --rm allure-generate",
     "serve": "docker compose up -d report",
     "stop": "docker compose down",
-    "report:local": "ALLURE_BIN='npx allure' bash scripts/generate-report.sh"
+    "report:local": "ALLURE_BIN='npx allure' bash scripts/generate-report.sh",
+    "test:demo": "DEMO_FAILURES=1 playwright test"
   },
   "license": "MIT",
   "devDependencies": {
