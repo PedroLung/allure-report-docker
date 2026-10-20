@@ -1,0 +1,1 @@
+{"total":4,"items":[{"uid":"b1c1b610eac1f1cc0ade946fde9adce4","name":"Demonstração de falhas","statistic":{"failed":2,"broken":1,"skipped":0,"passed":0,"unknown":0,"total":3}},{"uid":"186d8031f97c3a76445f447465faa72d","name":"API de exemplo","statistic":{"failed":0,"broken":0,"skipped":0,"passed":2,"unknown":0,"total":2}}]}
