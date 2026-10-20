@@ -38,7 +38,7 @@ if (process.env.DEMO_FAILURES) {
     });
 
     // 2) FAILED: comportamento esperado que a API não tem (o filtro é ignorado).
-    test("filtra a listagem por nome (o filtro é ignorado pela API)", async ({ request }) => {
+    test.skip("filtra a listagem por nome (o filtro é ignorado pela API)", async ({ request }) => {
       await allure.feature("Falha de asserção (failed)");
       await allure.severity("normal");
       await allure.issue("https://example.com/issues/DEMO-102", "DEMO-102");
