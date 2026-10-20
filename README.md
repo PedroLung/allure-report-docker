@@ -117,6 +117,146 @@ reprovar a pipeline.
 A partir daí, cada push na `main` atualiza o relatório e preserva o histórico. Em Pull Requests o relatório fica como
 artefato do workflow, sem publicar.
 
+## Alternativa: hospedar o relatório na AWS (S3 + CloudFront)
+
+O GitHub Pages resolve bem para um projeto público. Em um cenário corporativo é comum hospedar os relatórios na AWS,
+com **bucket privado** e **CDN na frente**. Esta seção descreve a arquitetura de referência. Ela **não está implantada
+neste repositório** (não há Terraform aqui), serve como guia de como a publicação seria feita.
+
+### Arquitetura
+
+```mermaid
+flowchart LR
+    CI["Pipeline CI/CD<br/>(GitHub Actions)"] -->|"1. baixa history anterior"| S3
+    CI -->|"2. sobe o relatório novo"| S3[("S3 privado<br/>bucket de relatórios")]
+    CI -->|"3. CreateInvalidation"| CF
+    U["Usuário<br/>(navegador)"] -->|HTTPS| R53["Route 53<br/>(Alias)"]
+    R53 --> CF["CloudFront<br/>+ certificado ACM"]
+    CF -->|"OAC (SigV4)"| S3
+```
+
+Ideia central: **o bucket nunca fica público**. Só o CloudFront consegue ler os arquivos, usando
+**Origin Access Control (OAC)**. O usuário acessa por uma URL HTTPS amigável, e o CloudFront entrega o HTML estático
+gerado pelo Allure.
+
+### Componentes
+
+| Recurso          | Papel                                                                           |
+| ---------------- | ------------------------------------------------------------------------------- |
+| **S3** (privado) | Guarda os relatórios. Com _Block Public Access_ ligado e versionamento opcional |
+| **CloudFront**   | Serve o relatório por HTTPS, com cache e compressão (gzip/brotli)               |
+| **OAC**          | Dá ao CloudFront permissão de leitura no bucket, sem URL pública                |
+| **ACM**          | Certificado TLS para o domínio (para CloudFront precisa ficar em `us-east-1`)   |
+| **Route 53**     | Registro Alias do domínio apontando para a distribuição                         |
+| **IAM (OIDC)**   | Permite que o GitHub Actions publique sem guardar chaves de acesso              |
+
+Opcional, mas recomendado: uma distribuição por **projeto × branch**, cada uma com `origin_path` próprio, para ter
+uma URL por ambiente, por exemplo `https://reports-meu-app-main.example.com`.
+
+### Estrutura no bucket
+
+Cada combinação de app e branch ocupa um prefixo isolado. O CloudFront aponta (`origin_path`) para a pasta `report/`.
+
+```
+s3://meu-bucket-allure/
+└── meu-app/
+    ├── main/
+    │   ├── report/      <- servido pelo CloudFront (inclui report/history/)
+    │   └── builds/      <- cópias históricas (pode expirar com lifecycle, ex.: 90 dias)
+    └── develop/
+        ├── report/
+        └── builds/
+```
+
+### Política do bucket (somente o CloudFront lê)
+
+Troque os valores entre `<>` pelos seus:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowCloudFrontRead",
+      "Effect": "Allow",
+      "Principal": { "Service": "cloudfront.amazonaws.com" },
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::<BUCKET>/*",
+      "Condition": {
+        "StringEquals": {
+          "AWS:SourceArn": "arn:aws:cloudfront::<ID_DA_CONTA>:distribution/<ID_DA_DISTRIBUICAO>"
+        }
+      }
+    }
+  ]
+}
+```
+
+### Ajustes importantes no CloudFront
+
+- **Default root object:** `index.html`.
+- **Erros 403 e 404:** responder com `/index.html` e status 200, porque o Allure é uma aplicação de página única
+  e o S3 devolve 403 para caminhos inexistentes em bucket privado.
+- **HTTP → HTTPS:** redirecionar automaticamente. TLS mínimo recomendado: `TLSv1.2_2021`.
+- **Cache:** um TTL curto (ex.: padrão de 5 min e máximo de 1 h) combina bem com invalidação a cada publicação.
+
+### Fluxo da pipeline
+
+O histórico funciona como no fluxo local, só que a "execução anterior" vem do S3 em vez de uma pasta local.
+
+```yaml
+permissions:
+  id-token: write # necessário para o login via OIDC
+  contents: read
+
+steps:
+  - uses: actions/checkout@v4
+  - uses: actions/setup-node@v4
+    with: { node-version: 22, cache: npm }
+  - run: npm ci
+  - run: npm test
+    continue-on-error: true # o relatório deve ser gerado mesmo com falhas
+
+  - uses: aws-actions/configure-aws-credentials@v4
+    with:
+      role-to-assume: arn:aws:iam::<ID_DA_CONTA>:role/<ROLE_DO_GITHUB>
+      aws-region: us-east-1
+
+  - name: Baixar histórico anterior
+    run: |
+      aws s3 sync "s3://$BUCKET/$APP/$BRANCH/report/history" allure-report/history || true
+
+  - name: Gerar relatório
+    run: ALLURE_BIN="npx allure" bash scripts/generate-report.sh
+
+  - name: Publicar no S3
+    run: aws s3 sync allure-report "s3://$BUCKET/$APP/$BRANCH/report" --delete
+
+  - name: Invalidar cache do CloudFront
+    run: aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/*"
+```
+
+Variáveis como `BUCKET`, `APP`, `BRANCH` e `DIST_ID` podem vir de variáveis do repositório ou de um gerenciador de
+segredos (por exemplo, o AWS Secrets Manager).
+
+### Segurança
+
+- Bucket com **Block Public Access** totalmente habilitado.
+- Acesso somente via **OAC**, com a policy limitada ao ARN da distribuição.
+- **OIDC** no lugar de chaves de acesso de longa duração; a role do pipeline com permissão mínima
+  (`s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`, `s3:ListBucket` no prefixo do app e `cloudfront:CreateInvalidation`).
+- **Lifecycle** para expirar `builds/` e versões antigas, controlando custo.
+
+### GitHub Pages ou AWS?
+
+|                                       | GitHub Pages                 | S3 + CloudFront                                  |
+| ------------------------------------- | ---------------------------- | ------------------------------------------------ |
+| Custo                                 | Grátis (repositório público) | Pago por uso (centavos para relatórios pequenos) |
+| Configuração                          | Mínima                       | Mais etapas (de preferência com Terraform)       |
+| Acesso privado / por empresa          | Não é o foco                 | Sim, bucket privado e controle por IAM           |
+| Domínio próprio e múltiplos ambientes | Limitado                     | Flexível                                         |
+| Indicado para                         | Vitrine, projetos pessoais   | Ambientes corporativos                           |
+
 ## Estrutura
 
 ```
@@ -143,7 +283,8 @@ artefato do workflow, sem publicar.
 
 ## Tecnologias
 
-Playwright · TypeScript · Allure Report · Docker / Docker Compose · nginx · GitHub Actions · GitHub Pages
+Playwright · TypeScript · Allure Report · Docker / Docker Compose · nginx · GitHub Actions · GitHub Pages ·
+AWS (S3, CloudFront, ACM, Route 53, IAM OIDC) como arquitetura de referência
 
 ## Licença
 
