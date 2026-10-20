@@ -1,0 +1,83 @@
+name: tests-allure
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write # necessário para publicar na branch gh-pages
+
+concurrency:
+  group: tests-allure-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test-and-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      # DEMO_FAILURES=1 inclui os testes que falham de propósito (tests/demo-failures.spec.ts),
+      # para o relatório publicado mostrar todos os tipos de falha. O continue-on-error mantém
+      # o job verde. Em um projeto real, remova o env e o continue-on-error: falha de teste deve
+      # reprovar a pipeline.
+      - name: Rodar testes
+        env:
+          DEMO_FAILURES: "1"
+        continue-on-error: true
+        run: npm test
+
+      # Os passos abaixo rodam mesmo se algum teste falhar, para o relatório sempre existir.
+      - name: Java (necessário para o Allure CLI)
+        if: always()
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Baixar histórico do último relatório
+        if: always()
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages
+        continue-on-error: true # na primeira execução a branch ainda não existe
+
+      - name: Gerar relatório Allure
+        if: always()
+        env:
+          ALLURE_BIN: npx allure
+        run: |
+          mkdir -p allure-report
+          if [ -d gh-pages/history ]; then
+            cp -r gh-pages/history allure-report/history
+          fi
+          bash scripts/generate-report.sh
+
+      - name: Guardar relatório como artefato
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: allure-report
+          retention-days: 14
+
+      # Publica no GitHub Pages somente a partir da main.
+      - name: Publicar no GitHub Pages
+        if: always() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./allure-report
