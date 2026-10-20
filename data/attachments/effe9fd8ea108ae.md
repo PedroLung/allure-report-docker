@@ -6,16 +6,17 @@
 
 # Test info
 
-- Name: demo-failures.spec.ts >> Demonstração de falhas (intencionais) >> atualiza um item com PUT /items/:id (ainda não implementado)
-- Location: tests/demo-failures.spec.ts:15:9
+- Name: demo-failures.spec.ts >> Demonstração de falhas (intencionais) >> filtra a listagem por nome (o filtro é ignorado pela API)
+- Location: tests/demo-failures.spec.ts:41:9
 
 # Error details
 
 ```
-Error: expect(received).toBe(expected) // Object.is equality
+Error: expect(received).toHaveLength(expected)
 
-Expected: 200
-Received: 404
+Expected length: 1
+Received length: 3
+Received array:  [{"id": "1b727eaa-03f9-474f-b088-b9ddb58aecc3", "name": "Cabo USB", "price": 25}, {"id": "68cb3aaf-e102-45da-a07b-15d673c44844", "name": "filtro-1792495020474", "price": 10}, {"id": "687c056c-6725-4d82-8300-515358bea714", "name": "Outro item", "price": 20}]
 ```
 
 # Test source
@@ -56,13 +57,12 @@ Received: 404
   33 |       await allure.attachment("resposta da API", await response.text(), "application/json");
   34 | 
   35 |       await allure.step("Validar que a atualização foi aceita", async () => {
-> 36 |         expect(response.status()).toBe(200);
-     |                                   ^ Error: expect(received).toBe(expected) // Object.is equality
+  36 |         expect(response.status()).toBe(200);
   37 |       });
   38 |     });
   39 | 
   40 |     // 2) FAILED: comportamento esperado que a API não tem (o filtro é ignorado).
-  41 |     test.skip("filtra a listagem por nome (o filtro é ignorado pela API)", async ({ request }) => {
+  41 |     test("filtra a listagem por nome (o filtro é ignorado pela API)", async ({ request }) => {
   42 |       await allure.feature("Falha de asserção (failed)");
   43 |       await allure.severity("normal");
   44 |       await allure.issue("https://example.com/issues/DEMO-102", "DEMO-102");
@@ -75,7 +75,8 @@ Received: 404
   51 |       const items = (await response.json()) as unknown[];
   52 |       await allure.parameter("filtro", unique);
   53 | 
-  54 |       expect(items).toHaveLength(1);
+> 54 |       expect(items).toHaveLength(1);
+     |                     ^ Error: expect(received).toHaveLength(expected)
   55 |     });
   56 | 
   57 |     // 3) BROKEN: o teste estoura o tempo (timeout), não é uma asserção falhando.
