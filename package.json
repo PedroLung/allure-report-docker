@@ -8,6 +8,9 @@
   "scripts": {
     "test": "playwright test",
     "typecheck": "tsc --noEmit",
+    "report": "docker compose --profile generate run --rm allure-generate",
+    "serve": "docker compose up -d report",
+    "stop": "docker compose down",
     "report:local": "ALLURE_BIN='npx allure' bash scripts/generate-report.sh"
   },
   "license": "MIT",

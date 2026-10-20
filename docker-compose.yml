@@ -1,0 +1,32 @@
+services:
+  # Gera (ou atualiza) o relatório a partir de ./allure-results, mantendo o histórico.
+  # Uso: docker compose --profile generate run --rm allure-generate
+  #
+  # Os resultados são montados somente leitura. O relatório e o histórico ficam em um
+  # volume do Docker (allure-report), então não há problema de permissão com a sua pasta.
+  allure-generate:
+    build: .
+    profiles: ["generate"]
+    working_dir: /app
+    entrypoint: ["bash", "scripts/generate-report.sh"]
+    environment:
+      RESULTS_DIR: /app/allure-results
+      REPORT_DIR: /report
+    volumes:
+      - ./allure-results:/app/allure-results:ro
+      - allure-report:/report
+      - ./scripts:/app/scripts:ro
+      - ./categories.json:/app/categories.json:ro
+
+  # Serve o relatório estático em http://localhost:8080
+  report:
+    image: nginx:1.27-alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - allure-report:/usr/share/nginx/html:ro
+
+volumes:
+  # Guarda o relatório e o histórico entre execuções.
+  # Apagar de propósito (zera o histórico): docker compose down -v
+  allure-report:
