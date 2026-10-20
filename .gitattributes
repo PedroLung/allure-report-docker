@@ -1,0 +1,3 @@
+# Normaliza fins de linha. Scripts shell precisam de LF para rodar no Linux/Docker.
+* text=auto
+*.sh text eol=lf
