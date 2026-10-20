@@ -1,0 +1,22 @@
+{
+  "name": "allure-report-docker",
+  "version": "1.0.0",
+  "description": "Relatórios Allure com Playwright, histórico entre execuções e Docker",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "playwright test",
+    "typecheck": "tsc --noEmit"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^26.6.5",
+    "allure-commandline": "^2.46.1",
+    "allure-js-commons": "^3.14.0",
+    "allure-playwright": "^3.14.0",
+    "typescript": "^7.0.2"
+  },
+  "private": true
+}
